@@ -1,0 +1,4 @@
+.env
+data/geoip/*
+!data/geoip/.gitkeep
+.DS_Store

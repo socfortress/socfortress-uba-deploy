@@ -1,0 +1,116 @@
+# SOCFortress UBA (User Behavior Analytics) for CoPilot.
+#
+#   cp .env.example .env      # then fill in the <...> values (see README.md)
+#   docker compose pull && docker compose up -d
+#
+# Everything runs from the public images below; nothing is built here. Upgrade with
+# `git pull && docker compose pull && docker compose up -d` (database migrations run first).
+# Every service has a memory limit: about 4 GB worst case in total.
+name: socfortress-uba
+
+x-uba: &uba
+  image: ${UBA_IMAGE:-ghcr.io/socfortress/socfortress-uba}:${UBA_TAG:-latest}
+  env_file:
+    - path: .env
+      required: true
+  environment:
+    UBA_DATABASE_URL: postgresql+asyncpg://uba:${POSTGRES_PASSWORD}@postgres:5432/uba
+    UBA_REDIS_URL: redis://redis:6379/0
+  volumes:
+    # Optional files: GeoLite2-City.mmdb, GeoLite2-ASN.mmdb, the indexer's root CA.
+    - ./data/geoip:/var/lib/uba:ro
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    mem_limit: ${UBA_MEM_POSTGRES:-1g}
+    environment:
+      POSTGRES_USER: uba
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: uba
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uba -d uba"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # The event queue. Capped and trimmed by the worker; noeviction because evicting would drop the queue.
+    command:
+      ["redis-server", "--appendonly", "yes", "--maxmemory", "${UBA_REDIS_MAXMEMORY:-512mb}", "--maxmemory-policy", "noeviction"]
+    mem_limit: ${UBA_MEM_REDIS:-768m}
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: apply database migrations, then exit. The other UBA services wait for it.
+  migrate:
+    <<: *uba
+    mem_limit: 512m
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # REST API: CoPilot's SOCFortress UBA connector points here.
+  api:
+    <<: *uba
+    mem_limit: ${UBA_MEM_API:-512m}
+    command: ["uba-api"]
+    ports: ["${UBA_API_PUBLISH:-8010}:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "uba-healthcheck", "api"]
+      interval: 15s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  # GELF TCP receiver: Graylog's "UBA GELF" output sends each customer's behavior events here.
+  gelf:
+    <<: *uba
+    mem_limit: ${UBA_MEM_GELF:-256m}
+    command: ["uba-gelf"]
+    ports: ["${UBA_GELF_PUBLISH:-12201}:12201"]
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "uba-healthcheck", "gelf"]
+      interval: 15s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+  # Learns, detects and scores. Keep exactly one.
+  worker:
+    <<: *uba
+    mem_limit: ${UBA_MEM_WORKER:-1536m}
+    command: ["uba-worker"]
+    environment:
+      UBA_DATABASE_URL: postgresql+asyncpg://uba:${POSTGRES_PASSWORD}@postgres:5432/uba
+      UBA_REDIS_URL: redis://redis:6379/0
+      UBA_WORKER_NAME: uba-worker-1
+      UBA_STORE: postgres
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "uba-healthcheck", "worker"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  pgdata:
+  redisdata:
