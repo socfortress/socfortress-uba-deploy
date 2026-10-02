@@ -263,7 +263,7 @@ def noise_to_signal(t):
         text(
             24,
             60,
-            "SOCFortress lab, early October 2026: one Microsoft 365 tenant with about 8,500 users, plus Wazuh endpoints.",
+            "SOCFortress lab, early October 2026: a large Microsoft 365 tenant plus Wazuh endpoints.",
             12.5,
             "text2",
             t=t,

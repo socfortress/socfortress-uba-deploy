@@ -31,7 +31,7 @@ It also turns volume into something a person can read:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/noise-to-signal-dark.svg">
-  <img alt="SOCFortress lab, early October 2026: about 500,000 events a day become about 110 findings a day, plus about 940 Wazuh alerts a day weighed as context, and 14 UBA alerts in 5 days" src="docs/images/noise-to-signal-light.svg">
+  <img alt="SOCFortress lab, early October 2026, a large Microsoft 365 tenant plus Wazuh endpoints: about 500,000 events a day become about 110 findings a day, plus about 940 Wazuh alerts a day weighed as context, and 14 UBA alerts in 5 days" src="docs/images/noise-to-signal-light.svg">
 </picture>
 
 What that means for a SOC:
@@ -225,3 +225,8 @@ CoPilot's User Behavior page (Directory tab) shows each source's last sync.
 | No findings for a customer | `docker compose logs worker` stats line (`raw=` grows when events arrive); in Graylog, the customer's "UBA FEED" streams receive messages and the "UBA GELF" output is running |
 | No UBA alerts in Incident Management | `UBA_COPILOT_*` in `.env`; the service account has the analyst role and no 2FA |
 | Feed "lagging" for Microsoft 365 | Microsoft's audit log normally trails by one to two hours; longer delays come from Wazuh's Office 365 module |
+
+## License
+
+GNU Affero General Public License v3.0, like [CoPilot](https://github.com/socfortress/CoPilot). See
+[LICENSE](LICENSE).
