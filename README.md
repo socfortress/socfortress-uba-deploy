@@ -167,6 +167,28 @@ docker compose logs --tail 50 worker          # a "stats" line every minute
 docker compose exec api uba-admin tenants list   # each customer: live, or how far its history replay got
 ```
 
+**Monitoring (Prometheus).** UBA serves metrics at `http://<uba-ip>:8010/metrics`: whether the worker
+and GELF receiver are running, documents and findings per customer, the event queue, and each
+customer's onboarding, processing lag and feed health. Create a read-only key for Prometheus and add a
+scrape job:
+
+```bash
+docker compose exec api uba-admin api-keys create --name prometheus --scope read --tenants '*'
+```
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: socfortress-uba
+    authorization: { credentials: "<the uba_ key>" }
+    static_configs: [{ targets: ["<uba-ip>:8010"] }]
+```
+
+Worth alerting on: `uba_worker_up == 0` or `uba_gelf_up == 0` (a process stopped),
+`uba_feed_status{status!="ok"} == 1` (a customer's data is late or missing),
+`uba_tenant_onboarding{status="error"} == 1`, a growing `uba_queue_lag`, and
+`rate(uba_gelf_dropped_total[5m]) > 0`.
+
 **Upgrade.** UBA runs the version in `UBA_TAG` (`.env`). Releases and their notes are listed on this
 repository's [Releases](https://github.com/socfortress/socfortress-uba-deploy/releases) page. To
 upgrade, pull this repository, set `UBA_TAG` to the new version, and restart; database migrations run
