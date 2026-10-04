@@ -4,12 +4,13 @@
 #   docker compose pull && docker compose up -d
 #
 # Everything runs from the public images below; nothing is built here. Upgrade with
-# `git pull && docker compose pull && docker compose up -d` (database migrations run first).
+# `git pull`, set UBA_TAG in .env to the new version, then `docker compose pull && docker compose up -d`
+# (database migrations run first).
 # Every service has a memory limit: about 4 GB worst case in total.
 name: socfortress-uba
 
 x-uba: &uba
-  image: ${UBA_IMAGE:-ghcr.io/socfortress/socfortress-uba}:${UBA_TAG:-latest}
+  image: ${UBA_IMAGE:-ghcr.io/socfortress/socfortress-uba}:${UBA_TAG:?set UBA_TAG in .env, e.g. 1.0.0}
   env_file:
     - path: .env
       required: true

@@ -167,16 +167,19 @@ docker compose logs --tail 50 worker          # a "stats" line every minute
 docker compose exec api uba-admin tenants list   # each customer: live, or how far its history replay got
 ```
 
-**Upgrade.** Database migrations run before the services start.
+**Upgrade.** UBA runs the version in `UBA_TAG` (`.env`). Releases and their notes are listed on this
+repository's [Releases](https://github.com/socfortress/socfortress-uba-deploy/releases) page. To
+upgrade, pull this repository, set `UBA_TAG` to the new version, and restart; database migrations run
+before the services start.
 
 ```bash
 cd /opt/socfortress-uba
 git pull
+sed -i 's/^UBA_TAG=.*/UBA_TAG=<new version>/' .env
 docker compose pull
 docker compose up -d
+curl -s http://<uba-ip>:8010/healthz          # reports the new version
 ```
-
-To stay on a version, set `UBA_TAG` in `.env` to that version instead of `latest`.
 
 **Back up.** Postgres holds what UBA has learned, its identities and its alerts. Back it up nightly,
 for example with this crontab line (`%` must be written `\%` in crontab):
