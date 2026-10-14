@@ -82,7 +82,8 @@ services:
     <<: *uba
     mem_limit: ${UBA_MEM_GELF:-256m}
     command: ["uba-gelf"]
-    ports: ["${UBA_GELF_PUBLISH:-12201}:12201"]
+    # UDP: the feed Graylog sends (a UBA that is down never holds Graylog up); TCP: older outputs.
+    ports: ["${UBA_GELF_PUBLISH:-12201}:12201/tcp", "${UBA_GELF_PUBLISH:-12201}:12201/udp"]
     depends_on:
       redis: { condition: service_healthy }
     healthcheck:

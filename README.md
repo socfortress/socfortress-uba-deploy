@@ -85,13 +85,15 @@ then. CoPilot's User Behavior page explains each rule in plain words.
 - The VM on the same private network (VLAN) as Graylog, the Wazuh indexer and CoPilot.
 - The indexer must keep at least the history new customers learn from (14 days by default).
 - CoPilot with the SOCFortress UBA connector (User Behavior page).
+- A larger UDP receive buffer on the VM (step 1). Graylog sends the feed over UDP in bursts, and
+  Linux's default buffer loses most of them.
 
 ### Network
 
 | From | To | Port | What |
 |---|---|---|---|
 | CoPilot | UBA VM | 8010/tcp | UBA's API |
-| Graylog | UBA VM | 12201/tcp | the UBA feed (GELF) |
+| Graylog | UBA VM | 12201/udp (and 12201/tcp for outputs set up before UBA 1.4.6) | the UBA feed (GELF) |
 | UBA VM | Graylog | 12204/tcp | UBA's alerts (the "UBA ALERTS" input that setup creates) |
 | UBA VM | Wazuh indexer | 9200/tcp | history and evidence |
 | UBA VM | CoPilot | 5000/tcp | creating Incident Management alerts |
@@ -104,7 +106,13 @@ then. CoPilot's User Behavior page explains each rule in plain words.
 git clone https://github.com/socfortress/socfortress-uba-deploy.git /opt/socfortress-uba
 cd /opt/socfortress-uba
 cp .env.example .env && chmod 600 .env
+
+# Graylog sends the UBA feed over UDP, in bursts: raise the kernel's UDP receive buffer limit.
+echo 'net.core.rmem_max = 33554432' > /etc/sysctl.d/90-socfortress-uba.conf
+sysctl -p /etc/sysctl.d/90-socfortress-uba.conf
 ```
+
+Optional: `UBA_GELF_UDP_ALLOWED=["<graylog-ip>/32"]` in `.env` accepts the feed only from Graylog.
 
 ### 2. Fill in `.env`
 
@@ -249,6 +257,8 @@ CoPilot's User Behavior page (Directory tab) shows each source's last sync.
 | A customer shows "error" | the reason is on the card; usually the indexer (address, password). UBA retries every 10 minutes |
 | No findings for a customer | `docker compose logs worker` stats line (`raw=` grows when events arrive); in Graylog, the customer's "UBA FEED" streams receive messages and the "UBA GELF" output is running |
 | No UBA alerts in Incident Management | `UBA_COPILOT_*` in `.env`; the service account has the analyst role and no 2FA |
+| Findings late, `uba_gelf_udp_kernel_dropped_total` rising (`/metrics`), or the gelf log warns about its receive buffer | `net.core.rmem_max` was not raised (step 1): raise it, then `docker compose restart gelf`. What was lost is replayed from the indexer |
+| Graylog stopped indexing while UBA was down | the customer's "UBA GELF" output is still TCP (set up before UBA 1.4.6): in CoPilot, run **Set up UBA** again for each customer to move it to UDP |
 | Feed "lagging" for Microsoft 365 | Microsoft's audit log normally trails by one to two hours; longer delays come from Wazuh's Office 365 module |
 
 ## License
